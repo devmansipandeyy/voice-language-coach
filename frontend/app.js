@@ -119,32 +119,29 @@ function stopMic() {
 }
 
 // ----- UI helpers ------------------------------------------------------------
-function setStatus(text, color) {
+function setStatus(text, state) {
   $("statusText").textContent = text;
-  const dot = $("statusDot");
-  dot.className = `relative inline-flex w-3 h-3 rounded-full ${color}`;
+  $("statusDot").className = `dot ${state || "idle"}`;
 }
 function setSpeaking(on) {
   if (on) {
     if (speakOffTimer) { clearTimeout(speakOffTimer); speakOffTimer = null; }
     agentSpeaking = true;
-    setStatus("Coach is speaking…", "text-violet-400 bg-violet-400 pulse");
+    setStatus("Coach is speaking…", "speaking");
   } else {
     // keep the mic gated for a short tail so the agent's trailing audio
     // (and speaker echo) isn't re-captured as if the learner spoke.
     if (speakOffTimer) clearTimeout(speakOffTimer);
     speakOffTimer = setTimeout(() => { agentSpeaking = false; }, 300);
-    setStatus("Listening — go ahead and talk", "text-emerald-400 bg-emerald-400");
+    setStatus("Listening — go ahead and talk", "listening");
   }
 }
 function addLine(role, text) {
   const wrap = document.createElement("div");
   const isCoach = role === "coach";
-  wrap.className = `flex ${isCoach ? "justify-start" : "justify-end"}`;
+  wrap.className = `msg ${isCoach ? "msg--coach" : "msg--learner"}`;
   const bubble = document.createElement("div");
-  bubble.className = isCoach
-    ? "max-w-[80%] bg-slate-800 rounded-2xl rounded-tl-sm px-4 py-2"
-    : "max-w-[80%] bg-violet-600 rounded-2xl rounded-tr-sm px-4 py-2";
+  bubble.className = "bubble";
   bubble.textContent = text;
   wrap.appendChild(bubble);
   $("log").appendChild(wrap);
@@ -165,7 +162,7 @@ function handleMessage(msg) {
     case "ready":
       usingBrowserTTS = msg.tts === "browser";
       fullDuplex = !!msg.full_duplex;
-      setStatus("Listening — go ahead and talk", "text-emerald-400 bg-emerald-400");
+      setStatus("Listening — go ahead and talk", "listening");
       break;
     case "mic":            // server-authoritative half-duplex gate
       micAllowed = !!msg.on;
@@ -202,10 +199,10 @@ function handleMessage(msg) {
       renderReport(msg.data);
       break;
     case "info":
-      setStatus(msg.message, "text-sky-400 bg-sky-400");
+      setStatus(msg.message, "info");
       break;
     case "error":
-      setStatus(msg.message, "text-rose-400 bg-rose-400");
+      setStatus(msg.message, "error");
       break;
   }
 }
@@ -225,41 +222,35 @@ function renderReport(d) {
   el.classList.remove("hidden");
   const score = Math.max(0, Math.min(100, d.fluency_score ?? 0));
   const corr = (d.corrections || []).map((c) => `
-    <li class="bg-slate-800/60 rounded-lg p-3">
-      <div class="text-rose-300 line-through">${esc(c.you_said)}</div>
-      <div class="text-emerald-300 font-medium">${esc(c.better)}</div>
-      <div class="text-slate-400 text-sm mt-1">${esc(c.why)}</div>
+    <li>
+      <div class="c-said">${esc(c.you_said)}</div>
+      <div class="c-better">${esc(c.better)}</div>
+      <div class="c-why">${esc(c.why)}</div>
     </li>`).join("");
   const vocab = (d.new_vocabulary || []).map((v) =>
-    `<span class="inline-block bg-slate-800 rounded-full px-3 py-1 m-1 text-sm">
-       <b class="text-sky-300">${esc(v.word)}</b> — ${esc(v.meaning)}</span>`).join("");
+    `<span class="chip"><b>${esc(v.word)}</b> — ${esc(v.meaning)}</span>`).join("");
   const next = (d.next_focus || []).map((t) => `<li>${esc(t)}</li>`).join("");
 
   el.innerHTML = `
-    <div class="flex items-center gap-5">
-      <div class="relative w-24 h-24 shrink-0">
-        <svg viewBox="0 0 36 36" class="w-24 h-24 -rotate-90">
-          <circle cx="18" cy="18" r="16" fill="none" stroke="#1e293b" stroke-width="3"/>
-          <circle cx="18" cy="18" r="16" fill="none" stroke="#8b5cf6" stroke-width="3"
+    <div class="report-top">
+      <div class="ring">
+        <svg viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="16" fill="none" stroke="var(--line)" stroke-width="3"/>
+          <circle cx="18" cy="18" r="16" fill="none" stroke="var(--accent)" stroke-width="3"
             stroke-dasharray="${score} 100" stroke-linecap="round"/>
         </svg>
-        <div class="absolute inset-0 flex flex-col items-center justify-center">
-          <span class="text-2xl font-bold">${score}</span>
-          <span class="text-[10px] text-slate-400">fluency</span>
-        </div>
+        <div class="num"><b>${score}</b><small>fluency</small></div>
       </div>
       <div>
-        <div class="text-xs uppercase tracking-wide text-slate-400">CEFR estimate</div>
-        <div class="text-2xl font-bold text-violet-300">${esc(d.cefr_estimate) || "—"}</div>
-        <p class="text-slate-300 mt-1">${esc(d.overall_comment)}</p>
+        <div class="report-cefr-label">CEFR estimate</div>
+        <div class="report-cefr">${esc(d.cefr_estimate) || "—"}</div>
+        <p class="report-comment">${esc(d.overall_comment)}</p>
       </div>
     </div>
-    ${corr ? `<h3 class="mt-6 mb-2 font-semibold text-slate-200">Corrections</h3><ul class="space-y-2">${corr}</ul>` : ""}
-    ${vocab ? `<h3 class="mt-6 mb-2 font-semibold text-slate-200">New vocabulary</h3><div>${vocab}</div>` : ""}
-    ${next ? `<h3 class="mt-6 mb-2 font-semibold text-slate-200">Practice next</h3><ul class="list-disc list-inside text-slate-300 space-y-1">${next}</ul>` : ""}
-    <button onclick="location.reload()" class="mt-6 w-full bg-violet-600 hover:bg-violet-500 transition px-4 py-2.5 rounded-xl font-semibold">
-      New session
-    </button>`;
+    ${corr ? `<h3>Corrections</h3><ul class="corrections">${corr}</ul>` : ""}
+    ${vocab ? `<h3>New vocabulary</h3><div class="vocab">${vocab}</div>` : ""}
+    ${next ? `<h3>Practice next</h3><ul class="focus">${next}</ul>` : ""}
+    <button onclick="location.reload()" class="btn btn--accent btn--block" style="margin-top:26px">New session</button>`;
   el.scrollIntoView({ behavior: "smooth" });
 }
 
@@ -299,8 +290,8 @@ async function startSession() {
       handleMessage(JSON.parse(ev.data));
     }
   };
-  ws.onclose = () => setStatus("Disconnected", "text-slate-500 bg-slate-500");
-  ws.onerror = () => setStatus("Connection error", "text-rose-400 bg-rose-400");
+  ws.onclose = () => setStatus("Disconnected", "idle");
+  ws.onerror = () => setStatus("Connection error", "error");
 }
 
 function interrupt() {
@@ -314,7 +305,7 @@ function endSession() {
   if (player) player.clear();
   if (usingBrowserTTS) speechSynthesis.cancel();
   stopMic();
-  setStatus("Generating your feedback report…", "text-sky-400 bg-sky-400");
+  setStatus("Generating your feedback report…", "info");
 }
 
 $("startBtn").onclick = startSession;

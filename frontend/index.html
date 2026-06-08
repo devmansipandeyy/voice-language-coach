@@ -4,41 +4,261 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Voice Language Coach</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    @keyframes pulse-ring { 0%{transform:scale(.8);opacity:.7} 80%,100%{transform:scale(2.2);opacity:0} }
-    .pulse::before{content:"";position:absolute;inset:0;border-radius:9999px;background:currentColor;animation:pulse-ring 1.4s cubic-bezier(.2,.6,.4,1) infinite}
-    .bar{display:inline-block;width:3px;margin:0 1px;background:#fff;border-radius:2px;animation:eq .9s ease-in-out infinite}
-    @keyframes eq{0%,100%{height:6px}50%{height:20px}}
+    :root {
+      --bg:        #ece0c8;
+      --paper:     #f6efdf;
+      --paper-2:   #f0e7d2;
+      --ink:       #251d14;
+      --ink-soft:  #6a5c49;
+      --line:      #d2c4a4;
+      --accent:    #bb4423;   /* terracotta */
+      --accent-2:  #2e6b66;   /* muted teal  */
+      --gold:      #c2882a;
+      --rose:      #a32f23;
+      --shadow:    4px 4px 0 var(--ink);
+      --radius:    14px;
+      --display:   "Fraunces", Georgia, serif;
+      --body:      "Hanken Grotesk", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--body);
+      font-size: 17px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      position: relative;
+    }
+    /* paper grain + warm vignette */
+    body::before {
+      content: "";
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+      mix-blend-mode: multiply;
+    }
+    body::after {
+      content: "";
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: radial-gradient(120% 80% at 50% -10%, rgba(255,247,228,.6), transparent 60%);
+    }
+
+    .hidden { display: none !important; }
+
+    .wrap {
+      position: relative; z-index: 1;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: clamp(28px, 6vw, 64px) 22px 64px;
+    }
+
+    /* ---- masthead ---- */
+    .masthead { margin-bottom: 30px; animation: rise .7s both; }
+    .kicker {
+      font-size: 12px; font-weight: 600; letter-spacing: .28em;
+      text-transform: uppercase; color: var(--accent-2); margin: 0 0 10px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .kicker::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+    .title {
+      font-family: var(--display);
+      font-optical-sizing: auto;
+      font-weight: 600;
+      font-size: clamp(40px, 9vw, 76px);
+      line-height: .96;
+      letter-spacing: -.02em;
+      margin: 0;
+      color: var(--ink);
+    }
+    .title em {
+      font-style: italic; font-weight: 500;
+      color: var(--accent);
+    }
+    .dek {
+      margin: 16px 0 0; max-width: 42ch;
+      color: var(--ink-soft); font-size: 18px;
+    }
+
+    /* ---- panels ---- */
+    .panel {
+      background: var(--paper);
+      border: 1.5px solid var(--ink);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 26px;
+      animation: rise .7s .08s both;
+    }
+
+    /* ---- setup form ---- */
+    .grid { display: grid; gap: 18px; grid-template-columns: 1fr; }
+    @media (min-width: 560px) { .grid { grid-template-columns: 1fr 1fr 1fr; } }
+    .field { display: block; }
+    .field > span {
+      display: block; font-size: 12px; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--ink-soft); margin-bottom: 7px;
+    }
+    select {
+      width: 100%; appearance: none;
+      font-family: var(--body); font-size: 16px; color: var(--ink);
+      background: var(--paper-2);
+      border: 1.5px solid var(--ink); border-radius: 9px;
+      padding: 11px 36px 11px 13px; cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%23251d14' stroke-width='2'%3E%3Cpath d='M3 5l4 4 4-4'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center;
+      transition: box-shadow .15s, transform .05s;
+    }
+    select:focus { outline: none; box-shadow: 2px 2px 0 var(--accent); }
+    .setup-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; margin-top: 24px; flex-wrap: wrap;
+    }
+    .check { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); font-size: 15px; }
+    .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+    /* ---- buttons ---- */
+    .btn {
+      font-family: var(--body); font-weight: 600; font-size: 16px;
+      border: 1.5px solid var(--ink); border-radius: 10px;
+      padding: 12px 22px; cursor: pointer; color: var(--ink);
+      background: var(--paper-2);
+      box-shadow: var(--shadow);
+      transition: transform .07s ease, box-shadow .07s ease, background .15s;
+    }
+    .btn:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--ink); }
+    .btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+    .btn:disabled { opacity: .55; cursor: progress; box-shadow: var(--shadow); transform: none; }
+    .btn--accent { background: var(--accent); color: #fdf3e6; border-color: var(--ink); }
+    .btn--ghost  { background: transparent; }
+    .btn--block  { width: 100%; }
+
+    /* ---- live ---- */
+    .live { margin-top: 26px; animation: rise .5s both; }
+    .statusbar { display: flex; align-items: center; gap: 11px; margin-bottom: 14px; }
+    .dot { width: 11px; height: 11px; border-radius: 50%; position: relative; flex: none; background: var(--ink-soft); }
+    .dot::after {
+      content: ""; position: absolute; inset: 0; border-radius: 50%;
+      background: inherit; opacity: 0; transform: scale(1);
+    }
+    .dot.listening { background: var(--accent-2); }
+    .dot.thinking  { background: var(--gold); }
+    .dot.info      { background: var(--accent-2); }
+    .dot.error     { background: var(--rose); }
+    .dot.idle      { background: var(--ink-soft); }
+    .dot.speaking  { background: var(--accent); }
+    .dot.speaking::after, .dot.listening::after {
+      animation: ping 1.5s cubic-bezier(.2,.6,.4,1) infinite;
+    }
+    #statusText { font-size: 14px; color: var(--ink-soft); font-weight: 500; }
+    .badge {
+      margin-left: auto; font-size: 12px; letter-spacing: .02em;
+      font-variant-numeric: tabular-nums; color: var(--ink-soft);
+      border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px;
+      background: var(--paper);
+    }
+    .badge:empty { display: none; }
+
+    .log {
+      background: var(--paper);
+      border: 1.5px solid var(--ink); border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      height: 360px; overflow-y: auto;
+      padding: 18px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .msg { display: flex; }
+    .msg--coach { justify-content: flex-start; }
+    .msg--learner { justify-content: flex-end; }
+    .bubble {
+      max-width: 82%; padding: 11px 15px; border-radius: 14px;
+      border: 1.5px solid var(--ink); font-size: 16px; line-height: 1.45;
+      animation: pop .25s ease both;
+    }
+    .msg--coach .bubble {
+      background: var(--paper-2); color: var(--ink);
+      border-bottom-left-radius: 4px;
+    }
+    .msg--learner .bubble {
+      background: var(--accent); color: #fdf3e6;
+      border-bottom-right-radius: 4px;
+    }
+    .interim {
+      margin: 10px 4px 0; min-height: 1.3rem; font-size: 14px;
+      font-style: italic; color: var(--ink-soft);
+    }
+    .controls { display: flex; gap: 14px; margin-top: 18px; }
+    .controls .btn { flex: 1; }
+
+    /* ---- report ---- */
+    .report { margin-top: 26px; }
+    .report-top { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+    .ring { position: relative; width: 104px; height: 104px; flex: none; }
+    .ring svg { width: 104px; height: 104px; transform: rotate(-90deg); }
+    .ring .num { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .ring .num b { font-family: var(--display); font-size: 30px; font-weight: 600; line-height: 1; }
+    .ring .num small { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); }
+    .report-cefr-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); }
+    .report-cefr { font-family: var(--display); font-size: 30px; font-weight: 600; color: var(--accent-2); line-height: 1.1; }
+    .report-comment { margin: 6px 0 0; color: var(--ink); max-width: 46ch; }
+    .report h3 {
+      font-family: var(--display); font-weight: 600; font-size: 21px;
+      margin: 28px 0 12px; display: flex; align-items: center; gap: 12px;
+    }
+    .report h3::after { content: ""; flex: 1; height: 1.5px; background: var(--line); }
+    .corrections { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .corrections li {
+      background: var(--paper-2); border: 1.5px solid var(--ink);
+      border-radius: 11px; padding: 12px 14px;
+    }
+    .c-said { color: var(--rose); text-decoration: line-through; }
+    .c-better { color: var(--accent-2); font-weight: 600; }
+    .c-why { color: var(--ink-soft); font-size: 14px; margin-top: 3px; }
+    .vocab { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      border: 1.5px solid var(--ink); background: var(--paper-2);
+      border-radius: 999px; padding: 6px 13px; font-size: 14px;
+    }
+    .chip b { color: var(--accent); }
+    .focus { margin: 0; padding-left: 20px; color: var(--ink); display: flex; flex-direction: column; gap: 5px; }
+
+    /* ---- motion ---- */
+    @keyframes ping { 0% { opacity: .55; transform: scale(1); } 80%,100% { opacity: 0; transform: scale(2.4); } }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    @keyframes pop  { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
   </style>
 </head>
-<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
-  <div class="mx-auto max-w-3xl px-4 py-8">
-    <header class="mb-6">
-      <h1 class="text-3xl font-bold bg-gradient-to-r from-sky-400 to-violet-400 bg-clip-text text-transparent">
-        🎙️ Voice Language Coach
-      </h1>
-      <p class="text-slate-400 mt-1">Have a live spoken conversation. Get a feedback report.</p>
+<body>
+  <main class="wrap">
+    <header class="masthead">
+      <p class="kicker">Spoken practice · live tutor</p>
+      <h1 class="title">Voice Language <em>Coach</em></h1>
+      <p class="dek">Hold a real spoken conversation, get gently corrected as you go, and leave with a feedback report.</p>
     </header>
 
     <!-- Setup -->
-    <section id="setup" class="bg-slate-900 rounded-2xl p-5 ring-1 ring-slate-800 shadow-xl">
-      <div class="grid sm:grid-cols-3 gap-4">
-        <label class="text-sm">Language
-          <select id="language" class="mt-1 w-full bg-slate-800 rounded-lg px-3 py-2 ring-1 ring-slate-700">
+    <section id="setup" class="panel">
+      <div class="grid">
+        <label class="field"><span>Language</span>
+          <select id="language">
             <option value="es">Spanish</option>
             <option value="fr">French</option>
             <option value="de">German</option>
             <option value="en">English</option>
           </select>
         </label>
-        <label class="text-sm">Level
-          <select id="level" class="mt-1 w-full bg-slate-800 rounded-lg px-3 py-2 ring-1 ring-slate-700">
+        <label class="field"><span>Level</span>
+          <select id="level">
             <option>A1</option><option selected>A2</option><option>B1</option><option>B2</option><option>C1</option>
           </select>
         </label>
-        <label class="text-sm">Scenario
-          <select id="scenario" class="mt-1 w-full bg-slate-800 rounded-lg px-3 py-2 ring-1 ring-slate-700">
+        <label class="field"><span>Scenario</span>
+          <select id="scenario">
             <option value="free">Free conversation</option>
             <option value="cafe">At a café</option>
             <option value="directions">Asking directions</option>
@@ -47,43 +267,33 @@
           </select>
         </label>
       </div>
-      <div class="flex items-center justify-between mt-4">
-        <label class="flex items-center gap-2 text-sm text-slate-300">
-          <input id="corrections" type="checkbox" checked class="accent-violet-500 w-4 h-4" />
+      <div class="setup-footer">
+        <label class="check">
+          <input id="corrections" type="checkbox" checked />
           Gentle inline corrections
         </label>
-        <button id="startBtn" class="bg-violet-600 hover:bg-violet-500 transition px-5 py-2.5 rounded-xl font-semibold">
-          Start session
-        </button>
+        <button id="startBtn" class="btn btn--accent">Start session →</button>
       </div>
     </section>
 
     <!-- Live -->
-    <section id="live" class="hidden mt-6">
-      <div class="flex items-center gap-3 mb-3">
-        <span id="statusDot" class="relative inline-flex w-3 h-3 rounded-full text-emerald-400 bg-emerald-400"></span>
-        <span id="statusText" class="text-sm text-slate-300">Connecting…</span>
-        <span id="ttBadge" class="ml-auto text-xs text-slate-400 font-mono"></span>
+    <section id="live" class="hidden live">
+      <div class="statusbar">
+        <span id="statusDot" class="dot listening"></span>
+        <span id="statusText">Connecting…</span>
+        <span id="ttBadge" class="badge"></span>
       </div>
-
-      <div id="log" class="bg-slate-900 rounded-2xl p-4 ring-1 ring-slate-800 h-80 overflow-y-auto space-y-3"></div>
-
-      <!-- interim transcript -->
-      <div id="interimWrap" class="mt-2 text-sm text-slate-400 italic min-h-[1.25rem]"></div>
-
-      <div class="flex gap-3 mt-4">
-        <button id="interruptBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 transition px-4 py-2.5 rounded-xl">
-          ✋ Interrupt
-        </button>
-        <button id="endBtn" class="flex-1 bg-rose-600 hover:bg-rose-500 transition px-4 py-2.5 rounded-xl font-semibold">
-          End & get feedback
-        </button>
+      <div id="log" class="log"></div>
+      <div id="interimWrap" class="interim"></div>
+      <div class="controls">
+        <button id="interruptBtn" class="btn btn--ghost">✋ Interrupt</button>
+        <button id="endBtn" class="btn btn--accent">End &amp; get feedback</button>
       </div>
     </section>
 
     <!-- Report -->
-    <section id="report" class="hidden mt-6 bg-slate-900 rounded-2xl p-6 ring-1 ring-slate-800"></section>
-  </div>
+    <section id="report" class="hidden panel report"></section>
+  </main>
 
   <script src="/app.js"></script>
 </body>
