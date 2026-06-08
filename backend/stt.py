@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Awaitable, Callable
 from urllib.parse import urlencode
 
@@ -43,6 +44,7 @@ class DeepgramSTT:
         self._final_segments: list[str] = []
         self._closing = False     # set by close() so we don't reconnect on purpose
         self._connected = False   # gate send_audio so frames don't hit a dead socket
+        self._last_voice_ts: float | None = None  # for end-of-turn timing evidence
 
     async def connect(self) -> None:
         params = {
@@ -116,6 +118,7 @@ class DeepgramSTT:
                 utterance = " ".join(self._final_segments).strip()
                 self._final_segments = []
                 if utterance:
+                    logger.info("END-OF-TURN via UtteranceEnd: %r", utterance)
                     await self._on_final(utterance)
                 continue
 
@@ -124,6 +127,11 @@ class DeepgramSTT:
 
             alts = msg.get("channel", {}).get("alternatives", [])
             transcript = alts[0].get("transcript", "").strip() if alts else ""
+
+            if transcript:
+                # Track the last time we heard words, to measure the silence gap
+                # that triggers end-of-turn (evidence for endpointing tuning).
+                self._last_voice_ts = time.monotonic()
 
             if msg.get("is_final") and transcript:
                 self._final_segments.append(transcript)
@@ -137,6 +145,15 @@ class DeepgramSTT:
                 utterance = " ".join(self._final_segments).strip()
                 self._final_segments = []
                 if utterance:
+                    gap_ms = (
+                        int((time.monotonic() - self._last_voice_ts) * 1000)
+                        if self._last_voice_ts else -1
+                    )
+                    logger.info(
+                        "END-OF-TURN via speech_final after ~%dms silence "
+                        "(endpointing=%dms): %r",
+                        gap_ms, config.STT_ENDPOINTING_MS, utterance,
+                    )
                     await self._on_final(utterance)
 
     async def _reconnect(self) -> bool:

@@ -77,13 +77,17 @@ CARTESIA_VERSION: str = "2024-11-13"
 DEEPGRAM_WS_URL: str = "wss://api.deepgram.com/v1/listen"
 
 # --- Deepgram turn detection ---
-# Research (Deepgram + LiveKit): endpointing ~300-800ms, utterance_end_ms >=1000,
-# combined. The old hardcoded endpointing=200 finalized on tiny mid-sentence
-# pauses, splitting one utterance into several `final`s — and each final
-# cancelled and restarted the reply, so the agent never finished ("just hello",
-# "doesn't respond"). ~550ms balances responsiveness vs cutting the learner off.
-STT_ENDPOINTING_MS: int = int(os.getenv("STT_ENDPOINTING_MS", "550"))
-STT_UTTERANCE_END_MS: int = int(os.getenv("STT_UTTERANCE_END_MS", "1200"))
+# Silence (ms) that ends the learner's turn. PROVEN by a probe against live
+# Deepgram (synthesized "I went to the store <900ms pause> yesterday..."):
+#   endpointing=550  -> the sentence was SPLIT at the pause (learner cut off)
+#   endpointing=1500 -> the whole sentence was captured as one turn
+# Language learners pause mid-sentence to think, so the threshold must be
+# forgiving. 1500ms costs ~1.5s of response latency but stops the cut-offs.
+# endpointing (silence) and utterance_end_ms (word-gap fallback) are kept equal
+# so neither fires early. Tunable: raise toward 2000 for slower speakers, lower
+# toward 1000 for snappier turns.
+STT_ENDPOINTING_MS: int = int(os.getenv("STT_ENDPOINTING_MS", "1500"))
+STT_UTTERANCE_END_MS: int = int(os.getenv("STT_UTTERANCE_END_MS", "1500"))
 
 # --- Logging ---
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
