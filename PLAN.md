@@ -283,14 +283,27 @@ Live testing surfaced two reliability symptoms. Root causes + fixes:
   diagnostic log when a sentence produces 0 audio chunks, so a recurrence is
   pinpointable. Likely contributor still open: the **gating gap** (DECISION
   below).
-- **DECISION NEEDED — gating gap.** The client only gates the mic once audio
-  starts *playing* (`setSpeaking` on first chunk), and `_on_final` *always*
-  cancels the in-flight turn (session.py). So early in a turn a stray transcript
-  (echo/noise) can cancel the reply mid-stream → "stuck" / "text, no speech".
-  Options: (a) ignore finals for the first ~500ms of a turn (debounce); (b) in
-  `_on_final`, don't cancel a turn younger than N ms; (c) gate the mic as soon
-  as the turn starts server-side, not on first audio. Needs a call before it's
-  fixed — each trades off interrupt responsiveness vs spurious cancels.
+## Turn-taking re-architecture (2026-06-08, research-backed)
+Live testing showed "doesn't respond / just hello / STT not working." Research
+([Deepgram end-of-speech](https://developers.deepgram.com/docs/understanding-end-of-speech-detection),
+[LiveKit turn detection](https://livekit.com/blog/turn-detection-voice-agents-vad-endpointing-model-based-detection))
+confirmed the cascading STT→LLM→TTS architecture is correct; the failure was
+turn-detection tuning + turn-taking, not the design. Targeted fix (kept the
+working Deepgram/Gemini/Cartesia clients), on branch `voice-turntaking-rework`:
+- **Endpointing 200ms → 550ms** (`STT_ENDPOINTING_MS`), `utterance_end_ms`
+  1000→1200. The old 200ms finalized on tiny pauses, splitting one utterance
+  into several `final`s; each one cancelled and restarted the reply, so the
+  agent never finished. This was the dominant cause.
+- **Echo-aware `_on_final`:** while the coach is speaking, a transcript that
+  highly overlaps the in-flight TTS is treated as the agent's own echo and
+  ignored — it no longer cancels the reply. A genuinely different utterance is
+  a real barge-in and replaces the reply. (Reuses the R1 echo guard.)
+- **Server-authoritative mic gating:** in half-duplex the server sends explicit
+  `mic on/off` messages around each reply; the client gates on those, not on the
+  audio-play side effect. Closes the start-of-turn gap and removes the
+  stuck-muted failure mode.
+- Tests: +3 (`test_turn_taking.py`), 25 total green.
+- Still gated behind config; `FULL_DUPLEX=true` keeps the mic live + echo guard.
 
 ## GSTACK REVIEW REPORT
 

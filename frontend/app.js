@@ -15,8 +15,9 @@ let player = null;
 let usingBrowserTTS = false;
 let speakingSources = 0; // active TTS audio sources (Cartesia path)
 let currentAgentEl = null;
-let agentSpeaking = false;   // half-duplex: don't capture mic while the coach talks
+let agentSpeaking = false;   // drives status display only
 let fullDuplex = false;      // set from server "ready"; when true the mic stays live
+let micAllowed = true;       // server-authoritative half-duplex gate (mic on/off)
 let speakOffTimer = null;
 
 // ----- gapless PCM playback (24 kHz mono s16le) ------------------------------
@@ -92,10 +93,11 @@ async function startMic() {
   const src = micCtx.createMediaStreamSource(micStream);
   const node = new AudioWorkletNode(micCtx, "cap");
   node.port.onmessage = (e) => {
-    // Half-duplex: drop mic frames while the coach speaks → no echo loop.
-    // Full-duplex: keep the mic live; the server's echo guard distinguishes a
-    // real barge-in from the coach hearing itself.
-    const gated = !fullDuplex && agentSpeaking;
+    // Half-duplex: the SERVER tells us when to mute (mic off for the whole reply,
+    // back on when it's done) — authoritative, so there's no gap and no way to
+    // get stuck muted. Full-duplex: keep the mic live; the server's echo guard
+    // distinguishes a real barge-in from the coach hearing itself.
+    const gated = !fullDuplex && !micAllowed;
     if (ws && ws.readyState === 1 && !gated) {
       ws.send(e.data);
       if (++framesSent % 25 === 0) console.log("[mic] sent", framesSent, "frames to server");
@@ -164,6 +166,9 @@ function handleMessage(msg) {
       usingBrowserTTS = msg.tts === "browser";
       fullDuplex = !!msg.full_duplex;
       setStatus("Listening — go ahead and talk", "text-emerald-400 bg-emerald-400");
+      break;
+    case "mic":            // server-authoritative half-duplex gate
+      micAllowed = !!msg.on;
       break;
     case "transcript":
       console.log("[stt]", msg.final ? "FINAL:" : "interim:", msg.text);

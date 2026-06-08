@@ -186,9 +186,17 @@ class CoachSession:
         )
 
     async def _on_final(self, utterance: str) -> None:
+        # Server-authoritative turn-taking. If the coach is mid-reply and this
+        # transcript is really its own voice leaking back (high token-overlap with
+        # what we're speaking), ignore it — otherwise the agent "interrupts" and
+        # answers itself, churning the pipeline into half-replies ("just hello",
+        # "doesn't respond"). A genuinely different utterance (low overlap) is a
+        # real barge-in and DOES replace the in-flight reply.
+        if self._speaking and not self._is_real_barge_in(utterance):
+            logger.info("ignoring echo-like final while speaking: %r", utterance)
+            return
         await self._send(type="transcript", text=utterance, final=True)
         self.transcript.append(f"LEARNER: {utterance}")
-        # Replace any in-flight agent turn with a response to the new utterance.
         await self._cancel_agent()
         self._agent_task = asyncio.create_task(self._agent_turn(utterance))
 
@@ -216,6 +224,12 @@ class CoachSession:
 
         try:
             self._speaking = True
+            # Half-duplex (default): tell the client to mute the mic for the whole
+            # reply, server-authoritatively. Closes the gap where the client only
+            # muted once audio started playing, and guarantees no echo reaches STT.
+            # Full-duplex keeps the mic live and relies on the echo guard instead.
+            if not config.FULL_DUPLEX:
+                await self._send(type="mic", on=False)
             # Window the history sent to the LLM so latency and token cost stay
             # flat in long sessions. The full transcript is kept separately
             # (self.transcript) for the end-of-session report.
@@ -291,6 +305,13 @@ class CoachSession:
         finally:
             self._speaking = False
             self._current_tts = ""
+            # Re-open the mic now the reply is done (half-duplex). Guarded: if the
+            # socket is already gone this must not mask the real outcome.
+            if not config.FULL_DUPLEX:
+                try:
+                    await self._send(type="mic", on=True)
+                except Exception:
+                    pass
 
     async def _speak(self, sentence: str, ttfa_ms: int | None, t0: float) -> int | None:
         """Render one sentence to audio (Cartesia) or hand it to the browser TTS."""
